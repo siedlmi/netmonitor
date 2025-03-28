@@ -1,0 +1,57 @@
+# Python bytecode files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment folders
+venv/
+env/
+.venv/
+.env/
+
+# IDE or editor folders
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Distribution and packaging
+build/
+dist/
+*.egg-info/
+*.eggs/
+
+# Test and coverage reports
+.coverage
+nosetests.xml
+coverage.xml
+*.cover
+*.hypothesis/
+
+# Logs
+*.log
+
+# Jupyter Notebook files
+.ipynb_checkpoints
+
+# Pytest cache
+.cache/
+
+# Dependency management
+Pipfile.lock
+poetry.lock
+*.lock
+
+# Python wheel files
+*.whl
+
+# Django settings
+*.sqlite3
+
+# Environment variables
+.env
+
+# Miscellaneous
+*.bak
+*.tmp
+*.orig
