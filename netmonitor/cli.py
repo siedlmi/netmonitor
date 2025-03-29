@@ -62,10 +62,12 @@ def live(
     process: Optional[str] = typer.Option(None, "--process", "-p", help="Filter by process name"),
     export: Optional[str] = typer.Option(None, "--export", "-e", help="Export format on exit: json or csv"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output filename (optional, auto-timestamped if omitted)"),
+    protocol: Optional[str] = typer.Option(None, "--protocol", help="Filter by protocol: tcp or udp"),
 ):
     """Live monitor network usage or active connections by process."""
     from netmonitor.monitor import live_monitor
-    live_monitor(refresh_interval, top_n, status, process, export, output)
+    live_monitor(refresh_interval, top_n, status, process, export, output, protocol)
+
 
 
 

@@ -171,14 +171,14 @@ def _show_top_connections(top_n: int, os_type: str, export: str = None, output: 
 
 # live_monitor functions remain unchanged
 
-def live_monitor(refresh_interval: float = 1.0, top_n: int = 10, status: str = None, process: str = None, export: str = None, output: str = None):
+def live_monitor(refresh_interval: float = 1.0, top_n: int = 10, status: str = None, process: str = None, export: str = None, output: str = None, protocol: str = None):
     os_type = get_platform()
     if supports_per_process_network_io():
         _live_monitor_full(refresh_interval, top_n, export, output)
     else:
-        _live_monitor_fallback(refresh_interval, top_n, os_type, status, process, export, output)
+        _live_monitor_fallback(refresh_interval, top_n, os_type, status, process, export, output, protocol)
 
-def _live_monitor_fallback(refresh_interval: float, top_n: int, os_type: str, status: str = None, process_filter: str = None, export: str = None, output: str = None):
+def _live_monitor_fallback(refresh_interval: float, top_n: int, os_type: str, status: str = None, process_filter: str = None, export: str = None, output: str = None, protocol: str = None):
     print(f"[bold yellow]Per-process bandwidth is not supported on {os_type.upper()}.[/bold yellow]")
     print("[bold green]Showing real-time connection activity instead. Press Ctrl+C to stop.[/bold green]")
 
@@ -193,6 +193,11 @@ def _live_monitor_fallback(refresh_interval: float, top_n: int, os_type: str, st
                     continue
                 if status:
                     conns = [c for c in conns if filter_connection_status(c.status, status)]
+                    if not conns:
+                        continue
+                if protocol:
+                    proto_type = socket.SOCK_STREAM if protocol.lower() == "tcp" else socket.SOCK_DGRAM
+                    conns = [c for c in conns if c.type == proto_type]
                     if not conns:
                         continue
                 tcp_count = sum(1 for c in conns if c.type == socket.SOCK_STREAM)
@@ -240,7 +245,7 @@ def _live_monitor_fallback(refresh_interval: float, top_n: int, os_type: str, st
 
         table.caption = (
             "[dim]Legend: E=ESTABLISHED, T=TIME_WAIT, C=CLOSE_WAIT, S=SYN_SENT, F=FIN_WAIT\n"
-            "Filters: Use --status ESTABLISHED or --process chrome"
+            "Filters: Use --status ESTABLISHED, --process chrome, --protocol tcp"
         )
         return table
 
