@@ -76,7 +76,6 @@ netmonitor live --help
 ## 🧩 Architecture
 - `monitor.py`: main monitoring logic
 - `cli.py`: Typer-powered CLI
-- `etw_monitor.py`: Windows-only bandwidth tracing using ETW
 - `utils.py`: cross-platform helpers
 
 ---
