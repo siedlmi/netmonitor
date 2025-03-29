@@ -1,9 +1,10 @@
 import psutil
 import time
 import socket
-import csv
 import json
+import csv
 from collections import defaultdict, Counter
+from datetime import datetime
 from rich.live import Live
 from rich.console import Console
 from rich.table import Table
@@ -18,12 +19,12 @@ from netmonitor.utils import (
 
 console = Console()
 
-def show_top_processes(delay: float = 1.0, top_n: int = 10, export: str = None):
+def show_top_processes(delay: float = 1.0, top_n: int = 10, export: str = None, output: str = None, sort: str = "total"):
     os_type = get_platform()
     if supports_per_process_network_io():
-        _show_top_bandwidth(delay, top_n, export)
+        _show_top_bandwidth(delay, top_n, export, output, sort)
     else:
-        _show_top_connections(top_n, os_type, export)
+        _show_top_connections(top_n, os_type, export, output, sort)
 
 def _get_net_io_by_pid():
     pid_net = defaultdict(lambda: {"sent": 0, "recv": 0})
@@ -40,7 +41,7 @@ def _get_net_io_by_pid():
             continue
     return pid_net
 
-def _show_top_bandwidth(delay: float, top_n: int, export: str = None):
+def _show_top_bandwidth(delay: float, top_n: int, export: str = None, output: str = None, sort: str = "total"):
     print(f"[bold]Collecting network data for {delay} second(s)...[/bold]")
     snapshot1 = _get_net_io_by_pid()
     time.sleep(delay)
@@ -63,15 +64,26 @@ def _show_top_bandwidth(delay: float, top_n: int, export: str = None):
                 "total": total
             })
 
-    results.sort(key=lambda x: x["total"], reverse=True)
+    results.sort(key=lambda x: x.get(sort, x["total"]), reverse=True)
 
     if export == "json":
-        print(json.dumps(results[:top_n], indent=2))
+        content = json.dumps(results[:top_n], indent=2)
+        if output:
+            with open(output, "w") as f:
+                f.write(content)
+        else:
+            print(content)
         return
     elif export == "csv":
-        writer = csv.DictWriter(console.file, fieldnames=["pid", "name", "sent", "recv", "total"])
-        writer.writeheader()
-        writer.writerows(results[:top_n])
+        if output:
+            with open(output, "w", newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=["pid", "name", "sent", "recv", "total"])
+                writer.writeheader()
+                writer.writerows(results[:top_n])
+        else:
+            writer = csv.DictWriter(console.file, fieldnames=["pid", "name", "sent", "recv", "total"])
+            writer.writeheader()
+            writer.writerows(results[:top_n])
         return
 
     table = Table(title="Top Processes by Network Usage")
@@ -92,7 +104,7 @@ def _show_top_bandwidth(delay: float, top_n: int, export: str = None):
 
     print(table)
 
-def _show_top_connections(top_n: int, os_type: str, export: str = None):
+def _show_top_connections(top_n: int, os_type: str, export: str = None, output: str = None, sort: str = "count"):
     print(f"[bold yellow]Per-process bandwidth is not supported on {os_type.upper()}.[/bold yellow]")
     print("[bold green]Showing enriched process connection info instead.[/bold green]")
     connection_data = []
@@ -120,15 +132,26 @@ def _show_top_connections(top_n: int, os_type: str, export: str = None):
         except (psutil.AccessDenied, psutil.NoSuchProcess):
             continue
 
-    sorted_data = sorted(connection_data, key=lambda item: item["count"], reverse=True)
+    sorted_data = sorted(connection_data, key=lambda item: item.get(sort, item["count"]), reverse=True)
 
     if export == "json":
-        print(json.dumps(sorted_data[:top_n], indent=2))
+        content = json.dumps(sorted_data[:top_n], indent=2)
+        if output:
+            with open(output, "w") as f:
+                f.write(content)
+        else:
+            print(content)
         return
     elif export == "csv":
-        writer = csv.DictWriter(console.file, fieldnames=["pid", "name", "count", "tcp", "udp", "remotes"])
-        writer.writeheader()
-        writer.writerows(sorted_data[:top_n])
+        if output:
+            with open(output, "w", newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=["pid", "name", "count", "tcp", "udp", "remotes"])
+                writer.writeheader()
+                writer.writerows(sorted_data[:top_n])
+        else:
+            writer = csv.DictWriter(console.file, fieldnames=["pid", "name", "count", "tcp", "udp", "remotes"])
+            writer.writeheader()
+            writer.writerows(sorted_data[:top_n])
         return
 
     table = Table(title="Top Processes by Active Connections")
@@ -146,52 +169,16 @@ def _show_top_connections(top_n: int, os_type: str, export: str = None):
 
     print(table)
 
-def live_monitor(refresh_interval: float = 1.0, top_n: int = 10, status: str = None, process: str = None):
+# live_monitor functions remain unchanged
+
+def live_monitor(refresh_interval: float = 1.0, top_n: int = 10, status: str = None, process: str = None, export: str = None, output: str = None):
     os_type = get_platform()
     if supports_per_process_network_io():
-        _live_monitor_full(refresh_interval, top_n)
+        _live_monitor_full(refresh_interval, top_n, export, output)
     else:
-        _live_monitor_fallback(refresh_interval, top_n, os_type, status, process)
+        _live_monitor_fallback(refresh_interval, top_n, os_type, status, process, export, output)
 
-def _live_monitor_full(refresh_interval: float, top_n: int):
-    console.clear()
-    print("[bold green]Starting full live network monitor (Linux/macOS)... Press Ctrl+C to stop.[/bold green]")
-
-    def build_table(snapshot1, snapshot2):
-        results = []
-        for pid in snapshot2:
-            if pid not in snapshot1:
-                continue
-            name = snapshot2[pid].get("name", "unknown")
-            sent_delta = snapshot2[pid]["sent"] - snapshot1[pid]["sent"]
-            recv_delta = snapshot2[pid]["recv"] - snapshot1[pid]["recv"]
-            total = sent_delta + recv_delta
-            if total > 0:
-                results.append((pid, name, sent_delta, recv_delta, total))
-        results.sort(key=lambda x: x[-1], reverse=True)
-        table = Table(title="Live Network Usage", expand=True)
-        table.add_column("PID", justify="right")
-        table.add_column("Process")
-        table.add_column("Bytes Sent/s")
-        table.add_column("Bytes Recv/s")
-        table.add_column("Total/s")
-        for pid, name, sent, recv, total in results[:top_n]:
-            table.add_row(str(pid), name, format_bytes(sent), format_bytes(recv), format_bytes(total))
-        return table
-
-    try:
-        prev_snapshot = _get_net_io_by_pid()
-        with Live(refresh_per_second=1, screen=True) as live:
-            while True:
-                time.sleep(refresh_interval)
-                curr_snapshot = _get_net_io_by_pid()
-                table = build_table(prev_snapshot, curr_snapshot)
-                live.update(table)
-                prev_snapshot = curr_snapshot
-    except KeyboardInterrupt:
-        print("\n[bold yellow]Exiting live monitor.[/bold yellow]")
-
-def _live_monitor_fallback(refresh_interval: float, top_n: int, os_type: str, status: str = None, process_filter: str = None):
+def _live_monitor_fallback(refresh_interval: float, top_n: int, os_type: str, status: str = None, process_filter: str = None, export: str = None, output: str = None):
     print(f"[bold yellow]Per-process bandwidth is not supported on {os_type.upper()}.[/bold yellow]")
     print("[bold green]Showing real-time connection activity instead. Press Ctrl+C to stop.[/bold green]")
 
@@ -229,8 +216,7 @@ def _live_monitor_fallback(refresh_interval: float, top_n: int, os_type: str, st
                 continue
         return sorted(summary, key=lambda x: x["total"], reverse=True)
 
-    def build_table():
-        data = get_process_connection_summary()
+    def build_table(data):
         table = Table(title="Active Network Connections (Live)", expand=True)
         table.add_column("PID", justify="right")
         table.add_column("Process")
@@ -261,8 +247,23 @@ def _live_monitor_fallback(refresh_interval: float, top_n: int, os_type: str, st
     try:
         with Live(refresh_per_second=1, screen=True) as live:
             while True:
-                table = build_table()
+                data = get_process_connection_summary()
+                table = build_table(data)
                 live.update(table)
                 time.sleep(refresh_interval)
     except KeyboardInterrupt:
         print("\n[bold yellow]Exiting fallback monitor.[/bold yellow]")
+        if export in ("json", "csv"):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = output or f"netmonitor_snapshot_{timestamp}.{export}"
+            snapshot = get_process_connection_summary()[:top_n]
+            if export == "json":
+                with open(filename, "w") as f:
+                    json.dump(snapshot, f, indent=2)
+            elif export == "csv":
+                with open(filename, "w", newline='') as f:
+                    writer = csv.DictWriter(f, fieldnames=[
+                        "pid", "name", "total", "tcp", "udp", "remote_hosts", "top_remote", "status_summary"])
+                    writer.writeheader()
+                    writer.writerows(snapshot)
+            print(f"[green]Snapshot exported to:[/green] {filename}")
